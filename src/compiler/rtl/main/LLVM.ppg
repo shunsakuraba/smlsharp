@@ -1,0 +1,337 @@
+(* -*- sml -*- *)
+(**
+ * LLVM mnemonic / definitions
+ * @copyright (c) 2012, Shun Sakuraba
+ * @author Shun SAKURABA
+ *)
+
+structure LLVM = 
+struct
+
+fun format_cnum_str str =
+    SMLFormat.BasicFormatters.format_string
+        (String.map (fn #"~" => #"-" | x => x) str)
+fun format_cint fmt x =
+    format_cnum_str (fmt StringCvt.DEC x)
+fun format_word8_dec x = format_cint Word8.fmt x
+
+(*% *)
+type ident = 
+     (*% @format(s) s *)
+     string 
+
+(*% *)
+datatype intlen =
+         (*% @format "8" *)
+         I8
+       | (*% @format "16" *)
+         I16
+       | (*% @format "32" *)
+         I32
+       | (*% @format "64" *)
+         I64
+
+(*% *)
+datatype ty = 
+         (*% @format(l) "i" l *)
+         INTEGER of intlen
+       | (*% @format "float" *)
+         FLOAT
+       | (*% @format "double" *)
+         DOUBLE
+       | (*% @format(t) t + "*" *)
+         POINTER of ty
+       | (*% @format "label" *)
+         LABEL
+       | (*% @format "void" *)
+         VOID
+       | (*% @format "metadata" *)
+         METADATA
+       | (*% @format({rettype, argtypes: ty tys}) rettype "(" tys(ty)(", ") ")" *)
+         FUNCTION of { rettype: ty, argtypes: ty list }
+       | (*% @format(ls: ty tys) "{" tys(ls)(", ") "}" *)
+         TYSTRUCT of ty list
+       | (*% @format({elemty, size}) "[" + size + "x" + elemty + "]" *)
+         ARRAY of { elemty: ty, size: int }
+
+(*% *)
+type localValue =
+     (*% @format(id) "%" id *)
+     ident
+
+(*% *)
+type globalValue =
+     (*% @format(id) "@" id *)
+     ident
+    
+(*% *)
+type label = 
+     ident
+
+(*% *)
+datatype compareInt = 
+         (*% @format "slt" *) (* signed *)
+         SLT
+       | (*% @format "ult" *) (* unsigned *)
+         ULT
+       | (*% @format "sle" *)
+         SLE
+       | (*% @format "ule" *)
+         ULE
+       | (*% @format "sgt" *)
+         SGT
+       | (*% @format "ugt" *)
+         UGT
+       | (*% @format "sge" *)
+         SGE
+       | (*% @format "uge" *)
+         UGE
+       | (*% @format "eq" *)
+         EQ
+
+(*% *)
+datatype compareFloat = 
+         (*% @format "olt" *) (* ordered *)
+         FOLT
+       | (*% @format "ole" *)
+         FOLE
+       | (*% @format "ogt" *)
+         FOGT
+       | (*% @format "oge" *)
+         FOGE
+       | (*% @format "oeq" *)
+         FOEQ
+       | (*% @format "ueq" *) (* unrodered *)
+         FUEQ
+
+(*% *)
+datatype unOpKind = 
+         (*% @format "trunc" *)
+         TRUNCATE
+       | (*% @format "zext" *)
+         ZEROEXT
+       | (*% @format "sext" *)
+         SIGNEDEXT
+       | (*% @format "fptrunc" *)
+         FPTRUNCATE
+       | (*% @format "fpext" *)
+         FPEXT
+       | (*% @format "fptoui" *)
+         FP2UNSIGNED
+       | (*% @format "fptosi" *)
+         FP2SIGNED
+       | (*% @format "uitofp" *)
+         UNSIGNED2FP
+       | (*% @format "sitofp" *)
+         SIGNED2FP
+       | (*% @format "ptrtoint" *)
+         PTR2INT
+       | (*% @format "inttoptr" *)
+         INT2PTR
+       | (*% @format "bitcast" *)
+         BITCAST
+
+(*% *)
+datatype binOpKind = 
+         (*% @format "add" *)
+         ADD 
+       | (*% @format "fadd" *)
+         FADD
+       | (*% @format "sub" *)
+         SUB
+       | (*% @format "fsub" *)
+         FSUB
+       | (*% @format "mul" *)
+         MUL
+       | (*% @format "fmul" *)
+         FMUL
+       | (*% @format "sdiv" *)
+         SDIV
+       | (*% @format "udiv" *)
+         UDIV
+       | (*% @format "fdiv" *)
+         FDIV
+       | (*% @format "srem" *)
+         SREM
+       | (*% @format "urem" *)
+         UREM
+       | (*% @format(cond) "icmp " cond *)
+         ICMP of compareInt
+       | (*% @format(cond) "fcmp " cond *)
+         FCMP of compareFloat
+       | (*% @format "and" *)
+         AND
+       | (*% @format "or" *)
+         OR
+       | (*% @format "xor" *)
+         XOR
+       | (*% @format "shl" *)
+         SHL
+       | (*% @format "lshr" *)
+         LSHR
+       | (*% @format "ashr" *)
+         ASHR
+
+fun format_llvm_string s = 
+    let 
+      fun left (s,n) = substring (s, size s - n, n)
+      fun pad0 (s,n) = if size s > n then s else left ("0000" ^ s, n)
+      fun hex2 i = pad0 (Int.fmt StringCvt.HEX i, 2)
+      fun hex4 i = pad0 (Int.fmt StringCvt.HEX i, 4)
+      val s_formatted = 
+          String.translate
+            (fn c => 
+                if Char.isPrint c andalso ord c < 128 then str c
+                else if ord c < 256 then "\\" ^ hex2 (ord c)
+                else "\\u" ^ hex4 (ord c))
+            s
+    in
+      SMLFormat.BasicFormatters.format_string s_formatted
+    end
+
+(*% @formatter(llvmString) format_llvm_string *)
+datatype constant = 
+         (*% @format(i) i *)
+         UINT of int (* FIXME TODO: cannot use AS2.Target.uint, because it's fixed to int32... *)
+       | (*% @format(i) i *)
+         SINT of int
+       | (*% @format(ce) ce *)
+         CONSTEXPR of constexpr
+       | (*% @format(tc lst) "{" + lst(tc)(", ") + "}"
+             @format:tc(ty * constant) ty + constant *)
+         CONSTSTRUCT of (ty * constant) list
+       | (*% @format(s) "c\"" s : llvmString "\"" *)
+         CONSTSTRING of string (* FIXME: It's strange but c"" is not documented ... *)
+       (* TODO: make format_llvm_string *)
+       | (*% @format(i) "@" i *)
+         CONSTGLOBAL of ident
+       | (*% @format "null" *)
+         NULL
+     and constexpr = 
+         (*% @format({constant, unOpKind, fromty, toty}) unOpKind "(" fromty + constant + "to" + toty ")" *)
+         CONSTUNOP of { constant: constant,
+                        unOpKind: unOpKind,
+                        fromty: ty,
+                        toty: ty }
+       | (*% @format({ty, constant, indices : tc ls }) "getelementptr(" ty + constant "," + ls(tc)(", ") ")" 
+             @format:tc(ty * constant) ty + constant *)
+         CONSTGEP of { ty : ty,
+                       constant: constant,
+                       indices: (ty * constant) list }
+
+(*% *)
+datatype value = 
+         (*% @format(c) c *)
+         IMM of constant
+       | (*% @format(l) l *)
+         LOCAL of localValue
+       | (*% @format(g) g *)
+         GLOBAL of globalValue
+       | (*% @format(l: constant ls) "{" ls(l)(", ") "}" *)
+         COMPOSITE of constant list
+
+fun format_isFastCC true = SMLFormat.BasicFormatters.format_string "fastcc "
+  | format_isFastCC false = SMLFormat.BasicFormatters.format_string "ccc "
+
+fun format_isTail true = SMLFormat.BasicFormatters.format_string "tail "
+  | format_isTail false = []
+
+fun format_callres NONE = []
+  | format_callres (SOME lv) = 
+    format_localValue lv @ SMLFormat.BasicFormatters.format_string " = "
+    
+
+(*% *)
+type functionArgument = 
+     (*% @format(value * ty) ty + value *)
+     value * ty
+
+(*% @formatter(isTail) format_isTail 
+    @formatter(isFastCC) format_isFastCC
+    @formatter(callres) format_callres
+ *)
+datatype instruction = 
+         (*% @format({retty, retval: v opt}) "ret" + retty + opt(v) *)
+         RET of { retty: ty, retval: value option }
+       | (*% @format({label}) "br" + "label" + "%" label *) (* TODO: label is type! *)
+         JUMP of { label : label }
+       | (*% @format({condition, labelIf, labelElse})
+                     "br i1" + condition ", label " "%" labelIf ", label " "%" labelElse *)
+         BRANCH of { condition: value, labelIf: label, labelElse: label }
+       | (*% @format({res, ty, binOpKind, arg1, arg2}) 
+                    res + "=" + binOpKind " " ty " " arg1 ", " arg2 *)
+         BINOP of { res: localValue, 
+                    ty: ty,
+                    binOpKind: binOpKind,
+                    arg1: value,
+                    arg2: value }
+       | (*% @format({res, ty, outty, unOpKind, arg})
+                    res " = " unOpKind " " ty " " arg " to " outty *)
+         UNOP of { res: localValue,
+                   ty: ty,
+                   outty: ty,
+                   unOpKind: unOpKind,
+                   arg: value }
+       | (*% @format({res, ty, arg}) res " = load " ty "* " arg *)
+         LOAD of { res: localValue, ty: ty, arg: value }
+       | (*% @format({value, ty, pointer}) "store " ty " " value ", " pointer *)
+         STORE of { value: localValue, ty: ty, pointer: localValue }
+       | (*% @format({res}) *)
+         EXTRACT of { res: localValue }
+       | (*% @format({res}) *)
+         INSERT of { res: localValue }
+       | (*% @format({res}) "getelementpointer" *)
+         GETELEMENTPOINTER of { res: localValue }
+       | (*% @format({res, labelVars}) *)
+         PHI of { res: localValue, labelVars: (label * localValue) list }
+       | (*% @format({res, resty, func, args: ar ars, isFastCC, isTail})
+                    res:callres isTail:isTail "call" + isFastCC:isFastCC resty + func "(" ars(ar)(", ") ")" *)
+         CALL of { res: localValue option, resty: ty,
+                   func: value,
+                   args: functionArgument list, 
+                   isFastCC: bool, isTail: bool }
+       | (*% @format "unreachable" *)
+         UNREACHABLE
+
+(*% *)
+type basicBlock =
+     (*% @format({blockname,instructions: l ls}) blockname ":" "\n    " ls(l)("\n    ") "\n" *)
+     { blockname: ident,
+       instructions: instruction list }
+     
+(*% *)
+type funbody = 
+     (*% @format({basicBlocks: b ls}) ls(b)("\n") *)
+     { basicBlocks: basicBlock list }
+
+fun format_argpair (lv, ty) = 
+    format_ty ty @ SMLFormat.BasicFormatters.format_string " " @ format_localValue lv
+
+(*% @formatter(argpair) format_argpair
+    @formatter(isFastCC) format_isFastCC *)
+datatype globalEntry = 
+         (*% @format({rettype,name,argtypes: ty tys})
+                    "declare" + rettype + "@" name "(" tys(ty)(", ") ")" \n *)
+         DECLFUN of { rettype: ty, name: ident, argtypes: ty list }
+       | (*% @format({rettype,name,args: arg ls,funbody,isFastCC})
+                    "define" + isFastCC:isFastCC rettype + name "(" ls(arg : argpair)(", ") ")" + "{\n" funbody "}" \n *)
+         DEFFUN of { rettype: ty, 
+                     name: globalValue, 
+                     args: (localValue * ty) list, 
+                     funbody: funbody,
+                     isFastCC: bool }
+       | (*% @format({ name, ty, value }) "@" name + "= internal constant" + ty + value \n *)
+         DECVAL of { name: ident,
+                     ty: ty,
+                     value: constant }
+
+(*% *)
+type globalEntries = 
+     (*% @format(ty tys) tys(ty)(\n) *)
+     globalEntry list
+
+(*% *)
+type program = 
+     globalEntries
+
+end

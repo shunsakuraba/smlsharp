@@ -1,0 +1,191 @@
+_require "../../../basis.smi"
+_require "../../../smlformat-lib.smi"
+
+structure LLVM =
+struct
+
+
+type ident = string
+
+datatype intlen = I8 | I16 | I32 | I64
+
+type localValue = ident
+type globalValue = ident
+type label = ident
+
+datatype ty =
+         INTEGER of intlen
+       | FLOAT
+       | DOUBLE
+       | POINTER of ty
+       | VOID
+       | LABEL
+       | METADATA
+       | FUNCTION of { argtypes: ty list, rettype: ty }
+       | TYSTRUCT of ty list
+       | ARRAY of { elemty: ty, size: int }
+
+datatype compareFloat =
+         FOEQ
+       | FOGE
+       | FOGT
+       | FOLE
+       | FOLT
+       | FUEQ
+
+datatype compareInt =
+         EQ
+       | SGE
+       | SGT
+       | SLE
+       | SLT
+       | UGE
+       | UGT
+       | ULE
+       | ULT
+
+datatype unOpKind =
+         BITCAST
+       | FP2SIGNED
+       | FP2UNSIGNED
+       | FPEXT
+       | FPTRUNCATE
+       | INT2PTR
+       | PTR2INT
+       | SIGNED2FP
+       | SIGNEDEXT
+       | TRUNCATE
+       | UNSIGNED2FP
+       | ZEROEXT
+
+datatype binOpKind =
+         ADD
+       | AND
+       | ASHR
+       | FADD
+       | FCMP of compareFloat
+       | FDIV
+       | FMUL
+       | FSUB
+       | ICMP of compareInt
+       | LSHR
+       | MUL
+       | OR
+       | SDIV
+       | SHL
+       | SREM
+       | SUB
+       | UDIV
+       | UREM
+       | XOR
+
+datatype constant = 
+         UINT of int
+       | SINT of int
+       | CONSTEXPR of constexpr
+       | CONSTSTRUCT of (ty * constant) list
+       | CONSTSTRING of string
+       | CONSTGLOBAL of ident
+       | NULL
+     and constexpr = 
+         CONSTUNOP of { constant: constant, 
+                        unOpKind: unOpKind, 
+                        fromty: ty, 
+                        toty: ty }
+       | CONSTGEP of { ty : ty,
+                       constant: constant,
+                       indices: (ty * constant) list }
+
+
+datatype value = 
+         IMM of constant
+       | LOCAL of localValue
+       | GLOBAL of globalValue
+       | COMPOSITE of constant list
+
+type functionArgument = value * ty
+
+datatype instruction =
+         RET of {retty: ty, retval: value option}
+       | JUMP of {label: label}
+       | BRANCH of {condition: value, labelElse: label, labelIf: label}
+       | UNOP
+         of {arg: value,
+             outty: ty,
+             res: localValue,
+             ty: ty,
+             unOpKind: unOpKind}
+       | BINOP
+         of {arg1: value,
+             arg2: value,
+             binOpKind: binOpKind,
+             res: localValue,
+             ty: ty}
+       | LOAD of {arg: value, res: localValue, ty: ty}
+       | STORE of {pointer: localValue, ty: ty, value: localValue}
+       | EXTRACT of {res: localValue}
+       | INSERT of {res: localValue}
+       | GETELEMENTPOINTER of {res: localValue}
+       | PHI of {labelVars: (label * localValue) list, res: localValue}
+       | CALL
+         of { args: functionArgument list,
+              func: value,
+              isFastCC: bool,
+              isTail: bool,
+              res: localValue option, resty: ty }
+       | UNREACHABLE
+
+type basicBlock =
+     { blockname: ident,
+       instructions: instruction list }
+
+type funbody = 
+     { basicBlocks: basicBlock list }
+
+datatype globalEntry =
+         DECLFUN of {argtypes: ty list, name: ident, rettype: ty}
+       | DEFFUN of { rettype: ty, 
+                     name: globalValue, 
+                     args: (localValue * ty) list, 
+                     funbody: funbody,
+                     isFastCC: bool }
+       | DECVAL of { name: ident,
+                     ty: ty,
+                     value: constant }
+
+                   
+type globalEntries = globalEntry list
+
+type program = globalEntries
+
+(*
+val format_binOpKind = LLVM.binOpKind -> FormatExpression.expression list
+val format_cint = _
+                  : ['a.
+                       (StringCvt.radix -> 'a -> string)
+                     -> 'a -> expression list]
+val format_cnum_str = string -> expression list
+val format_compareFloat = LLVM.compareFloat -> FormatExpression.expression list
+val format_compareInt = LLVM.compareInt -> FormatExpression.expression list
+val format_constant = LLVM.constant -> expression list
+val format_funbody = LLVM.funbody -> FormatExpression.expression list
+val format_globalEntry = LLVM.globalEntry -> FormatExpression.expression list
+val format_ident = String.string -> FormatExpression.expression list
+val format_intlen = fn : LLVM.intlen -> FormatExpression.expression list
+val format_label = fn : String.string -> FormatExpression.expression list
+val format_localValue = fn : String.string -> FormatExpression.expression list
+val format_ty = fn : ty -> FormatExpression.expression list
+val format_unOpKind = fn : LLVM.unOpKind -> FormatExpression.expression list
+val format_value = fn : LLVM.value -> FormatExpression.expression list
+val format_word8_dec = fn : word -> expression list
+ *)
+(* for prototyping purpose *)
+val format_instruction : instruction -> SMLFormat.FormatExpression.expression list
+val format_basicBlock : basicBlock -> SMLFormat.FormatExpression.expression list
+val format_globalEntry : globalEntry -> SMLFormat.FormatExpression.expression list
+
+val format_globalEntries : globalEntries -> SMLFormat.FormatExpression.expression list
+
+end
+
+

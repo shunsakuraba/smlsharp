@@ -503,6 +503,13 @@ struct
         ()
       end
 *)
+  fun doAI2LLVM mainSymbol aicode = 
+      let
+        val llvmcode = LLVMEmit.emit mainSymbol aicode
+        (* val _ = printLLVM llvmcode *)
+      in
+        ()
+      end
 
   fun doAIGeneration2 andecs =
       let
@@ -736,6 +743,8 @@ struct
         val ancalc = doStaticAllocation ancalc
 
         val aicode = doAIGeneration2 ancalc
+
+        val _ = doAI2LLVM mainSymbol aicode
 
         (* case #cpu (Control.targetInfo ()) of "x86" => *)
         val rtl = doRTLX86Select mainSymbol aicode
