@@ -5,6 +5,7 @@ _require "../../abstractinstruction2/main/AbstractInstruction.ppg.smi"
 _require "../../name/main/LocalID.smi"
 _require "../../control/main/Control.ppg.smi"
 _require "../../../compiler-utils/env/main/SEnv.smi"
+_require "../../../smlnj-lib/Util/binary-set-fn.smi"
 
 structure LLVMEmit = 
 struct

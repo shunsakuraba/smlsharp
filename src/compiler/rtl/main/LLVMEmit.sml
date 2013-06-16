@@ -17,10 +17,41 @@ type renameEnv = (string * L.ty) SEnv.map
 
 local 
 
+structure StrOrd =
+struct 
+  type ord_key = string
+  val compare = String.compare
+end
+
+structure GlEnv = BinarySetFn(StrOrd)
+
 (* FIXME: I will regret these hacks. Should have used writer monad ... *)
-val toplevelDecls : L.globalEntry list ref = ref []
-fun pushToplevelDecls decl = 
-    toplevelDecls := decl :: !toplevelDecls
+val toplevelDecls : (GlEnv.set * LLVM.globalEntry list) ref = ref (GlEnv.empty, [])
+
+fun pushToplevelFunDecls l =
+    toplevelDecls := (GlEnv.add ((#1 (!toplevelDecls)), l), (#2 (!toplevelDecls)))
+fun pushToplevelDecls 
+        (L.DECLFUN { rettype = L.VOID,
+                     name = l,
+                     argtypes = [] }) = pushToplevelFunDecls l 
+  | pushToplevelDecls
+	(L.DECLFUN _) = raise Control.Bug "Only void() functions are allowed in toplevel declaratoin"
+  | pushToplevelDecls decl = 
+    toplevelDecls := ((#1 (!toplevelDecls)), decl :: (#2 (!toplevelDecls)))
+
+fun clearToplevelDecls () =
+    toplevelDecls := (GlEnv.empty, [])
+	      
+fun getToplevelDecls () =
+    let val fndecls = 
+	    List.map 
+		(fn l => 
+		    L.DECLFUN { rettype = L.VOID,
+				name = l,
+				argtypes = [] }) 
+		(GlEnv.listItems (#1 (!toplevelDecls))) in
+	fndecls @ (#2 (!toplevelDecls))
+    end
 
 val blockPrologueInsns : L.instruction list ref = ref []
 
@@ -796,12 +827,11 @@ fun emit {mainSymbol: string} (absprog:AbstractInstruction2.program) =
                 constants,
                 globals = _,
                 toplevel } =>
-              let val () = toplevelDecls := []
+              let val () = clearToplevelDecls ()
                   val funcs = emitClusters clusters
                   val consts = emitConstants constants
                   val main = emitToplevel mainSymbol toplevel
-                  val addenda = !toplevelDecls
-                  val () = toplevelDecls := []
+                  val addenda = getToplevelDecls ()
               in
                 funcs @ consts @ main @ addenda
               end
